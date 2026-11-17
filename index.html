@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>One Island v0.2</title>
+<title>One Island v0.3</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#0b1c3a; touch-action:none;
@@ -42,6 +42,41 @@
   #viewBtn {position:fixed;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:7;border:1px solid #ffffff70;border-radius:24px;padding:12px 16px;background:#153a54b8;color:white;font-size:12px;font-weight:800;letter-spacing:1px;display:none;backdrop-filter:blur(8px);}
   body.playing #viewBtn {display:block;}
   @media(max-width:500px){body.playing #joy{display:block;}.chip{font-size:10px;padding:7px 9px;}#hud{gap:6px;}.overlay .tag{font-size:13px;}.overlay h1{font-size:40px;}.overlay .keys{font-size:11px;}}
+
+  /* v0.3 gameplay UI */
+  #coins { position:fixed; top:calc(52px + env(safe-area-inset-top)); left:12px; z-index:6; display:none; }
+  #hpwrap { position:fixed; top:calc(52px + env(safe-area-inset-top)); right:12px; z-index:6; width:110px; height:16px;
+    border-radius:999px; border:1px solid rgba(255,255,255,.4); background:rgba(20,40,80,.45); display:none; overflow:hidden; }
+  #hpbar { height:100%; width:100%; background:linear-gradient(90deg,#ff5a6a,#ff8a5a); border-radius:999px; transition:width .2s; }
+  body.playing #coins, body.playing #hpwrap { display:block; }
+
+  #actions { position:fixed; right:14px; bottom:calc(20px + env(safe-area-inset-bottom)); z-index:7; display:none;
+    flex-direction:column; align-items:flex-end; gap:10px; }
+  body.playing.touch #actions { display:flex; }
+  body.playing.touch #viewBtn { right:14px; bottom:calc(230px + env(safe-area-inset-bottom)); }
+  .abtn { width:64px; height:64px; border-radius:50%; border:2px solid rgba(255,255,255,.45);
+    background:rgba(21,58,84,.72); color:#fff; font-size:24px; font-weight:900; backdrop-filter:blur(6px); }
+  .abtn:active { transform:scale(.9); background:rgba(90,140,200,.8); }
+  .abtn small { display:block; font-size:9px; letter-spacing:1px; }
+
+  #talk { position:fixed; left:50%; bottom:calc(150px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    z-index:7; display:none; border:1px solid rgba(255,255,255,.5); border-radius:999px; padding:10px 22px;
+    background:rgba(21,58,84,.85); color:#fff; font-size:14px; font-weight:800; backdrop-filter:blur(6px); }
+
+  #shop { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    z-index:9; width:min(92vw,360px); background:rgba(16,34,64,.94); border:1px solid rgba(160,210,255,.4);
+    border-radius:18px; padding:14px 16px; color:#e6f2ff; display:none; backdrop-filter:blur(8px); }
+  #shop h3 { font-size:16px; margin-bottom:4px; color:#cfe6ff; }
+  #shop .sub { font-size:12px; color:#9cc4e8; margin-bottom:10px; }
+  #shop .row { display:flex; justify-content:space-between; align-items:center; padding:7px 0;
+    border-top:1px solid rgba(255,255,255,.12); font-size:13px; }
+  #shop .row button { border:none; border-radius:999px; padding:6px 14px; font-weight:800; font-size:12px;
+    background:linear-gradient(180deg,#ffd97a,#e8a83a); color:#4a2e10; cursor:pointer; }
+  #shop .row button:disabled { background:#4a5a70; color:#9aa; }
+  #shop .sellrow button { background:linear-gradient(180deg,#a8d8ff,#5ea0e8); color:#10265a; }
+  #shopClose { position:absolute; top:8px; right:12px; border:none; background:none; color:#9cc4e8; font-size:18px; }
+  #inv { font-size:12px; color:#ffd97a; margin-top:8px; }
+
   .hidden { display:none !important; }
 </style>
 </head>
@@ -49,19 +84,36 @@
 <canvas id="c"></canvas>
 
 <div id="hud">
-  <div class="chip">🏝️ ONE ISLAND v0.2</div>
+  <div class="chip">🏝️ ONE ISLAND v0.3</div>
   <div class="chip" id="isleInfo">🍃 Home Island</div>
 </div>
 
 <button id="viewBtn" aria-label="Toggle world view">🗺️ WORLD VIEW</button>
 <div id="joy"><div class="thumb" id="joyThumb"></div></div>
 
+
+<div class="chip" id="coins">🪙 0</div>
+<div id="hpwrap"><div id="hpbar"></div></div>
+<div id="actions">
+  <button class="abtn" id="btnJump">⬆<small>JUMP</small></button>
+  <button class="abtn" id="btnAtk">⚔️<small>ATTACK</small></button>
+  <button class="abtn" id="btnSlide">💨<small>SLIDE</small></button>
+</div>
+<button id="talk">💬 TALK</button>
+<div id="shop">
+  <button id="shopClose">✕</button>
+  <h3 id="shopTitle">Shop</h3>
+  <div class="sub" id="shopSub"></div>
+  <div id="shopRows"></div>
+  <div id="inv"></div>
+</div>
+
 <div class="overlay" id="start">
   <h1>ONE ISLAND</h1>
-  <div class="ver">v0.2</div>
-  <div class="tag">🌳 Lush forests above the clouds<br>❄️🏜️🔥💧 20 islands, 10 magic elements<br>🏰 The castle beam protects them all<br>✨ Richer light, flowing water &amp; a world view</div>
+  <div class="ver">v0.3</div>
+  <div class="tag">⚔️ Jump, attack &amp; slide - fight flying beasts!<br>🪶 Collect feathers, claws, bones &amp; leather<br>🪙 Trade drops for coins, buy swords &amp; armour<br>🏘️ NPCs and houses on every island</div>
   <button class="playbtn" id="playBtn">▶ PLAY</button>
-  <div class="keys">📱 Joystick to run &bull; swipe to look around<br>💻 WASD / arrows to run &bull; drag mouse to look</div>
+  <div class="keys">📱 Joystick to run &bull; buttons to jump/attack/slide<br>💻 WASD to run &bull; Space jump &bull; J attack &bull; K slide &bull; E talk</div>
   <div class="foot">Made by Smiley 💙</div>
 </div>
 
@@ -551,6 +603,275 @@ var running = false, now = 0, overview=false;
 document.getElementById('viewBtn').addEventListener('click',function(){overview=!overview;this.textContent=overview?'🧒 BACK TO HERO':'🗺️ WORLD VIEW';joyVec.x=joyVec.y=0;});
 var isleInfo = document.getElementById('isleInfo');
 
+
+// ---------- v0.3 gameplay: coins, shops, NPCs, enemies, drops ----------
+var coins = 0, maxHp = 100, hp = 100, dmg = 20;
+var inv = { feather:0, claw:0, bone:0, leather:0 };
+var DROP_INFO = {
+  feather:{ name:'Feather', emoji:'🪶', price:3, color:0xf0f4ff },
+  claw:{ name:'Claw', emoji:'🦅', price:5, color:0xd8d0c0 },
+  bone:{ name:'Bone', emoji:'🦴', price:4, color:0xe8e4d8 },
+  leather:{ name:'Leather', emoji:'🟤', price:6, color:0x9a6a3e }
+};
+var WEAPONS = [
+  { name:'Wooden Sword', dmg:20, price:0, owned:true },
+  { name:'Iron Sword', dmg:35, price:25, owned:false },
+  { name:'Crystal Blade', dmg:55, price:60, owned:false },
+  { name:'Star Sword', dmg:90, price:120, owned:false }
+];
+var ARMORS = [
+  { name:'Cloth Tunic', hp:100, price:0, owned:true },
+  { name:'Leather Armour', hp:140, price:30, owned:false },
+  { name:'Iron Armour', hp:200, price:70, owned:false },
+  { name:'Star Armour', hp:300, price:150, owned:false }
+];
+var curWeapon = 0, curArmor = 0;
+
+// villager / NPC figure
+function makeNPC(shirt, hat){
+  var g = new THREE.Group();
+  var skin = lam(0xf0c08a), pants = lam(0x4a3a2a);
+  var legL = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.55,0.24), pants); legL.position.set(-0.14,0.28,0);
+  var legR = legL.clone(); legR.position.x = 0.14;
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.56,0.6,0.34), lam(shirt)); body.position.y = 0.86;
+  var head = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.38), skin); head.position.y = 1.38;
+  g.add(legL,legR,body,head);
+  if(hat === 'cone'){ var h1 = new THREE.Mesh(new THREE.ConeGeometry(0.34,0.5,6), lam(0x8a5a2f)); h1.position.y = 1.78; g.add(h1); }
+  else if(hat === 'hair'){ var h2 = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.14,0.42), lam(0x553311)); h2.position.y = 1.6; g.add(h2); }
+  else { var h3 = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.34,0.14,8), lam(hat)); h3.position.y = 1.62; g.add(h3); }
+  return g;
+}
+
+// shop + trade NPCs in the hero's village, plus extra houses
+var npcs = [];
+function placeHomeNPC(x, z, shirt, hat, role, label){
+  var n = makeNPC(shirt, hat);
+  n.position.set(x, 0, z); n.rotation.y = rand(0,6.3); home.add(n);
+  npcs.push({ mesh:n, x:x, z:z, role:role, label:label, baseY:0, phase:rand(0,6) });
+}
+placeHomeNPC(7, 12, 0x7a3a3a, 0x333333, 'smith', '⚒️ Blacksmith');
+placeHomeNPC(-8, 11, 0x3a6a3a, 'cone', 'trader', '🪶 Trader');
+placeHomeNPC(11, 3, 0x3a4a8a, 'hair', null, '🧑 Villager');
+placeHomeNPC(-11, -2, 0x8a6a3a, 0xc8b060, null, '🧑 Villager');
+
+// houses + villagers on every other island too
+elementIslands.forEach(function(ei2, idx){
+  var r = 13;
+  if(idx % 2 === 1){ // the copy without a village gets 2 houses
+    var roofC = [0xc85a3a,0x7a5a8a,0x4a7ab8][idx%3];
+    addHuts(ei2.mesh, r, 2, roofC);
+  }
+  var n = makeNPC([0x7a3a3a,0x3a6a3a,0x3a4a8a,0x8a6a3a][idx%4], ['cone','hair',0xc8b060,0x333333][idx%4]);
+  var a = rand(0,6.3);
+  n.position.set(Math.cos(a)*6, 0, Math.sin(a)*6);
+  ei2.mesh.add(n);
+});
+
+// ---------- flying enemies ----------
+var enemies = [], drops = [], spawnTimer = 4;
+var enemyMats = {
+  body: lam(0x4a3a5a), wing: lam(0x6a5a8a), eye: new THREE.MeshBasicMaterial({ color: 0xff4040 })
+};
+function spawnEnemy(){
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 7, 6), enemyMats.body);
+  body.scale.set(1, 0.8, 1.3);
+  var wingG = new THREE.BoxGeometry(1.6, 0.06, 0.6); wingG.translate(0.8, 0, 0);
+  var wl = new THREE.Mesh(wingG, enemyMats.wing); wl.scale.x = -1;
+  var wr = new THREE.Mesh(wingG, enemyMats.wing);
+  var eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 5, 4), enemyMats.eye); eyeL.position.set(-0.18, 0.1, 0.55);
+  var eyeR = eyeL.clone(); eyeR.position.x = 0.18;
+  g.add(body, wl, wr, eyeL, eyeR);
+  var a = rand(0, 6.3), r = rand(14, 24); // spawn around the home village
+  g.position.set(Math.cos(a)*r, rand(4, 8), Math.sin(a)*r);
+  scene.add(g);
+  var kind = pick(['feather','claw','bone','leather']);
+  enemies.push({ mesh:g, wl:wl, wr:wr, hp:40, flap:rand(0,9), a:rand(0,6.3),
+    r:r, h:g.position.y, drop:kind, hitCd:0, alive:true });
+}
+function killEnemy(e){
+  e.alive = false;
+  scene.remove(e.mesh);
+  // spawn the drop where it died
+  var info = DROP_INFO[e.drop];
+  var dmesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0),
+    new THREE.MeshLambertMaterial({ color: info.color, emissive: info.color, emissiveIntensity: 0.5, flatShading: true }));
+  dmesh.position.set(e.mesh.position.x, 0.6, e.mesh.position.z);
+  scene.add(dmesh);
+  drops.push({ mesh:dmesh, kind:e.drop, t:0 });
+}
+
+// ---------- jump / attack / slide state ----------
+var vy = 0, py = 0, grounded = true, atkT = 0, atkCd = 0, slideT = 0, slideCd = 0, hurtT = 0;
+function doJump(){ if(grounded && running && !overview){ vy = 7.5; grounded = false; } }
+function doAttack(){ if(atkCd <= 0 && slideT <= 0 && running && !overview){ atkT = 0.32; atkCd = 0.55; } }
+function doSlide(){ if(slideCd <= 0 && grounded && running && !overview){ slideT = 0.4; slideCd = 1.4; } }
+
+// ---------- shop UI ----------
+var shopEl = document.getElementById('shop'), shopRows = document.getElementById('shopRows'),
+    shopTitle = document.getElementById('shopTitle'), shopSub = document.getElementById('shopSub'),
+    invEl = document.getElementById('inv'), coinsEl = document.getElementById('coins'),
+    hpbarEl = document.getElementById('hpbar'), talkBtn = document.getElementById('talk');
+var shopOpen = null;
+function invText(){
+  return '🎒 ' + Object.keys(inv).map(function(k){ return DROP_INFO[k].emoji + ' ' + inv[k]; }).join('  ');
+}
+function refreshHud(){ coinsEl.textContent = '🪙 ' + coins; hpbarEl.style.width = Math.max(0, hp/maxHp*100) + '%'; }
+function openShop(role, label){
+  shopOpen = role; shopTitle.textContent = label;
+  shopRows.innerHTML = '';
+  if(role === 'smith'){
+    shopSub.textContent = 'Buy weapons and armour with coins';
+    WEAPONS.forEach(function(w, i){
+      var row = document.createElement('div'); row.className = 'row';
+      var lbl = document.createElement('span');
+      lbl.textContent = '🗡️ ' + w.name + ' (' + w.dmg + ' dmg)' + (i === curWeapon ? ' ✓' : '');
+      var btn = document.createElement('button');
+      if(w.owned){ btn.textContent = i === curWeapon ? 'Equipped' : 'Equip'; btn.disabled = i === curWeapon;
+        btn.onclick = function(){ curWeapon = i; dmg = w.dmg; openShop(role, label); }; }
+      else { btn.textContent = w.price + ' 🪙'; btn.disabled = coins < w.price;
+        btn.onclick = function(){ coins -= w.price; w.owned = true; curWeapon = i; dmg = w.dmg; refreshHud(); openShop(role, label); }; }
+      row.appendChild(lbl); row.appendChild(btn); shopRows.appendChild(row);
+    });
+    ARMORS.forEach(function(a2, i){
+      var row = document.createElement('div'); row.className = 'row';
+      var lbl = document.createElement('span');
+      lbl.textContent = '🛡️ ' + a2.name + ' (' + a2.hp + ' HP)' + (i === curArmor ? ' ✓' : '');
+      var btn = document.createElement('button');
+      if(a2.owned){ btn.textContent = i === curArmor ? 'Equipped' : 'Equip'; btn.disabled = i === curArmor;
+        btn.onclick = function(){ curArmor = i; hp = Math.min(hp, a2.hp); maxHp = a2.hp; refreshHud(); openShop(role, label); }; }
+      else { btn.textContent = a2.price + ' 🪙'; btn.disabled = coins < a2.price;
+        btn.onclick = function(){ coins -= a2.price; a2.owned = true; curArmor = i; maxHp = a2.hp; hp = a2.hp; refreshHud(); openShop(role, label); }; }
+      row.appendChild(lbl); row.appendChild(btn); shopRows.appendChild(row);
+    });
+  } else {
+    shopSub.textContent = 'Sell enemy drops for coins';
+    Object.keys(inv).forEach(function(k){
+      var info = DROP_INFO[k];
+      var row = document.createElement('div'); row.className = 'row sellrow';
+      var lbl = document.createElement('span');
+      lbl.textContent = info.emoji + ' ' + info.name + ' x' + inv[k] + ' (' + info.price + ' 🪙 each)';
+      var btn = document.createElement('button');
+      btn.textContent = 'Sell all'; btn.disabled = inv[k] === 0;
+      btn.onclick = function(){ coins += inv[k]*info.price; inv[k] = 0; refreshHud(); openShop(role, label); };
+      row.appendChild(lbl); row.appendChild(btn); shopRows.appendChild(row);
+    });
+  }
+  invEl.textContent = invText() + '   🪙 ' + coins;
+  shopEl.style.display = 'block';
+}
+document.getElementById('shopClose').addEventListener('click', function(){ shopEl.style.display='none'; shopOpen = null; });
+talkBtn.addEventListener('click', function(){
+  if(nearNPC){ openShop(nearNPC.role, nearNPC.label); }
+});
+var nearNPC = null;
+
+// ---------- v0.3 button + key input ----------
+document.getElementById('btnJump').addEventListener('pointerdown', function(e){ e.preventDefault(); doJump(); });
+document.getElementById('btnAtk').addEventListener('pointerdown', function(e){ e.preventDefault(); doAttack(); });
+document.getElementById('btnSlide').addEventListener('pointerdown', function(e){ e.preventDefault(); doSlide(); });
+window.addEventListener('keydown', function(e){
+  if(e.code === 'Space') doJump();
+  if(e.code === 'KeyJ') doAttack();
+  if(e.code === 'KeyK' || e.code === 'ShiftLeft') doSlide();
+  if(e.code === 'KeyE' && nearNPC) openShop(nearNPC.role, nearNPC.label);
+});
+refreshHud();
+
+// ---------- v0.3 per-frame gameplay ----------
+function updateGameplay(dt){
+  atkCd -= dt; slideCd -= dt; hurtT -= dt;
+  // jump physics
+  if(!grounded){
+    vy -= 22*dt; py += vy*dt;
+    if(py <= 0){ py = 0; vy = 0; grounded = true; }
+  }
+  // slide dash: burst of speed, hero leans low
+  var sliding = slideT > 0;
+  if(sliding){
+    slideT -= dt;
+    P.x += Math.sin(P.rotY) * 13 * dt; P.z += Math.cos(P.rotY) * 13 * dt;
+    var rr3 = Math.hypot(P.x, P.z);
+    if(rr3 > HOME_R - 1.5){ P.x = P.x/rr3*(HOME_R - 1.5); P.z = P.z/rr3*(HOME_R - 1.5); }
+  }
+  player.position.y += py;
+  player.rotation.x = sliding ? -0.9 : 0;
+  // attack swing + hit check
+  if(atkT > 0){
+    atkT -= dt;
+    player.userData.armR.rotation.x = -2.2 * Math.sin((0.32-atkT)/0.32 * Math.PI);
+    enemies.forEach(function(e){
+      if(!e.alive) return;
+      var d = Math.hypot(e.mesh.position.x - P.x, e.mesh.position.z - P.z);
+      if(d < 3.2 && Math.abs(e.mesh.position.y - (py+1.2)) < 3.5){
+        e.hp -= dmg;
+        e.mesh.position.x += (e.mesh.position.x - P.x)/d * 2;
+        e.mesh.position.z += (e.mesh.position.z - P.z)/d * 2;
+        if(e.hp <= 0) killEnemy(e);
+      }
+    });
+  }
+  // enemies: fly, flap, chase near village, bite the hero
+  spawnTimer -= dt;
+  if(spawnTimer <= 0 && enemies.filter(function(e){return e.alive;}).length < 5){
+    spawnEnemy(); spawnTimer = rand(5, 9);
+  }
+  enemies.forEach(function(e){
+    if(!e.alive) return;
+    e.flap += dt*10;
+    var f = Math.sin(e.flap)*0.8; e.wl.rotation.z = f; e.wr.rotation.z = -f;
+    var dx = P.x - e.mesh.position.x, dz = P.z - e.mesh.position.z;
+    var d = Math.hypot(dx, dz);
+    if(d < 16){ // chase
+      e.mesh.position.x += dx/d * 3.2 * dt;
+      e.mesh.position.z += dz/d * 3.2 * dt;
+      e.mesh.position.y += ((py + 1.4) - e.mesh.position.y) * Math.min(1, 2*dt);
+    } else {
+      e.a += dt*0.5;
+      e.mesh.position.x += Math.cos(e.a) * 1.5 * dt;
+      e.mesh.position.z += Math.sin(e.a) * 1.5 * dt;
+      e.mesh.position.y += Math.sin(now*1.5 + e.flap*0.1) * 0.4 * dt;
+    }
+    e.mesh.rotation.y = Math.atan2(dx, dz);
+    e.hitCd -= dt;
+    if(d < 1.3 && e.hitCd <= 0 && hurtT <= 0){
+      hp -= 8; hurtT = 0.6; e.hitCd = 1.2;
+      if(hp < 0) hp = 0;
+      refreshHud();
+    }
+  });
+  // drops: spin, bob, pick up on touch
+  for(var di = drops.length-1; di >= 0; di--){
+    var dr = drops[di];
+    dr.t += dt;
+    dr.mesh.rotation.y += dt*3;
+    dr.mesh.position.y = 0.6 + Math.sin(dr.t*3)*0.15;
+    if(Math.hypot(dr.mesh.position.x - P.x, dr.mesh.position.z - P.z) < 1.2){
+      inv[dr.kind]++;
+      scene.remove(dr.mesh);
+      drops.splice(di, 1);
+      refreshHud();
+    }
+  }
+  // NPC idle bob + proximity prompt
+  nearNPC = null;
+  npcs.forEach(function(n){
+    n.mesh.position.y = Math.sin(now*2 + n.phase)*0.04;
+    if(n.role){
+      var d = Math.hypot(n.x - P.x, n.z - P.z);
+      if(d < 3) nearNPC = n;
+    }
+  });
+  talkBtn.style.display = (nearNPC && shopOpen === null) ? 'block' : 'none';
+  if(nearNPC) talkBtn.textContent = '💬 ' + nearNPC.label;
+  if(shopOpen){ // close shop if the hero walks away
+    var anyNear = false;
+    npcs.forEach(function(n){ if(n.role && Math.hypot(n.x-P.x, n.z-P.z) < 4.5) anyNear = true; });
+    if(!anyNear){ shopEl.style.display = 'none'; shopOpen = null; }
+  }
+  invEl.textContent = invText() + '   🪙 ' + coins;
+}
+
 // ---------- main loop ----------
 var last = performance.now();
 function frame(){
@@ -615,6 +936,7 @@ function frame(){
     player.position.set(P.x, Math.abs(sw)*0.06 + (P.speed>0?0:idle), P.z);
     player.rotation.y = P.rotY;
     pShadow.position.x = P.x; pShadow.position.z = P.z;
+    updateGameplay(dt);
 
     // nearest island info chip
     var nearName = '🍃 Home Island', nd = 1e9;
@@ -650,8 +972,13 @@ document.getElementById('playBtn').addEventListener('click', function(){
 
 // debug/verification hook (harmless)
 window.oneisland = { P: P, scene: scene, player: player, islands: elementIslands,
-  renderer:renderer, treeCount:treeCount, version:"0.2",
+  renderer:renderer, treeCount:treeCount, version:"0.3",
   start: function(){ document.getElementById('playBtn').click(); },
+  v03: { getCoins: function(){ return coins; }, getHp: function(){ return hp; },
+    getInv: function(){ return JSON.parse(JSON.stringify(inv)); },
+    enemyCount: function(){ return enemies.filter(function(e){return e.alive;}).length; },
+    spawnEnemy: spawnEnemy, doJump: doJump, doAttack: doAttack, doSlide: doSlide,
+    npcs: npcs, openShop: openShop, killAll: function(){ enemies.forEach(function(e){ if(e.alive) killEnemy(e); }); } },
   setYaw: function(y){ cameraYaw = y; } };
 
 camera.position.set(0, 12, 34);
