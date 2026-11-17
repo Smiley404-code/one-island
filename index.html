@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>One Island v0.1</title>
+<title>One Island v0.2</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#0b1c3a; touch-action:none;
@@ -39,6 +39,9 @@
   .playbtn:active { transform:translateY(4px); box-shadow:0 2px 0 #33619e, 0 6px 14px rgba(0,0,0,.45); }
   .overlay .foot { position:absolute; bottom:calc(16px + env(safe-area-inset-bottom)); font-size:13px; color:#7ea8d4; }
   .overlay .keys { margin-top:14px; font-size:13px; color:#93bce0; }
+  #viewBtn {position:fixed;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:7;border:1px solid #ffffff70;border-radius:24px;padding:12px 16px;background:#153a54b8;color:white;font-size:12px;font-weight:800;letter-spacing:1px;display:none;backdrop-filter:blur(8px);}
+  body.playing #viewBtn {display:block;}
+  @media(max-width:500px){.chip{font-size:10px;padding:7px 9px;}#hud{gap:6px;}.overlay .tag{font-size:13px;}.overlay h1{font-size:40px;}.overlay .keys{font-size:11px;}}
   .hidden { display:none !important; }
 </style>
 </head>
@@ -46,16 +49,17 @@
 <canvas id="c"></canvas>
 
 <div id="hud">
-  <div class="chip">🏝️ ONE ISLAND v0.1</div>
+  <div class="chip">🏝️ ONE ISLAND v0.2</div>
   <div class="chip" id="isleInfo">🍃 Home Island</div>
 </div>
 
+<button id="viewBtn" aria-label="Toggle world view">🗺️ WORLD VIEW</button>
 <div id="joy"><div class="thumb" id="joyThumb"></div></div>
 
 <div class="overlay" id="start">
   <h1>ONE ISLAND</h1>
-  <div class="ver">v0.1</div>
-  <div class="tag">🏝️ A world of floating islands<br>❄️🏜️🔥💧 20 islands, 10 magic elements<br>🏰 The castle beam protects them all<br>💎 The villain wants the crystals. Not today.</div>
+  <div class="ver">v0.2</div>
+  <div class="tag">🌳 Lush forests above the clouds<br>❄️🏜️🔥💧 20 islands, 10 magic elements<br>🏰 The castle beam protects them all<br>✨ Richer light, flowing water &amp; a world view</div>
   <button class="playbtn" id="playBtn">▶ PLAY</button>
   <div class="keys">📱 Joystick to run &bull; swipe to look around<br>💻 WASD / arrows to run &bull; drag mouse to look</div>
   <div class="foot">Made by Smiley 💙</div>
@@ -73,33 +77,51 @@ var canvas = document.getElementById('c');
 var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.16;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 var scene = new THREE.Scene();
 var camera = new THREE.PerspectiveCamera(58, window.innerWidth/window.innerHeight, 0.1, 900);
-var SKY = new THREE.Color(0x7ec4f0);
+var SKY = new THREE.Color(0x8dceec);
 scene.background = SKY;
-scene.fog = new THREE.Fog(0x9fd4f2, 70, 340);
+scene.fog = new THREE.Fog(0xb7dceb, 110, 390);
 
-var hemi = new THREE.HemisphereLight(0xd8ecff, 0x6a90b8, 0.95); scene.add(hemi);
+var hemi = new THREE.HemisphereLight(0xd9f4ff, 0x596b49, 1.1); scene.add(hemi);
 var sun = new THREE.DirectionalLight(0xfff3d0, 1.15); sun.position.set(60, 90, 40); scene.add(sun);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left=-43; sun.shadow.camera.right=43;
+sun.shadow.camera.top=43; sun.shadow.camera.bottom=-43;
+sun.shadow.camera.near=1; sun.shadow.camera.far=180;
+sun.shadow.bias=-0.001; sun.shadow.normalBias=0.06;
+// A painted sky dome instead of a flat background.
+var skyDome = new THREE.Mesh(new THREE.SphereGeometry(700,24,16),new THREE.ShaderMaterial({
+ side:THREE.BackSide, depthWrite:false,
+ vertexShader:'varying vec3 vPos; void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'varying vec3 vPos; void main(){float h=clamp(normalize(vPos).y,0.,1.);vec3 c=mix(vec3(.77,.9,.95),vec3(.22,.57,.83),pow(h,.65)); gl_FragColor=vec4(c,1.);}'
+})); scene.add(skyDome);
 
 function onResize(){ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
 window.addEventListener('resize', onResize);
 
 // ---------- helpers ----------
-function rand(a,b){ return a + Math.random()*(b-a); }
-function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+var seed=241117;
+function random(){seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;}
+function rand(a,b){ return a + random()*(b-a); }
+function pick(arr){ return arr[(random()*arr.length)|0]; }
 function lam(color, opts){ opts = opts||{}; opts.color = color; if(opts.flat===undefined) opts.flat = true;
   return new THREE.MeshLambertMaterial({ color: opts.color, flatShading: opts.flat }); }
 
 // ---------- sea of clouds below ----------
 (function(){
-  var N = 46, inst = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0),
+  var N = 95, inst = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
     new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, transparent: true, opacity: 0.92 }), N);
   var d = new THREE.Object3D(), col = new THREE.Color();
   for(var i=0;i<N;i++){
-    var a = rand(0,Math.PI*2), r = Math.sqrt(Math.random())*300 + 10;
+    var a = rand(0,Math.PI*2), r = Math.sqrt(random())*300 + 10;
     d.position.set(Math.cos(a)*r, rand(-26,-9), Math.sin(a)*r);
     d.scale.set(rand(9,22), rand(2.5,4.5), rand(7,16));
     d.rotation.set(0, rand(0,6), 0); d.updateMatrix();
@@ -115,32 +137,48 @@ var floaters = []; // islands that bob
 function islandBase(r, topColor, rockColor){
   var g = new THREE.Group();
   var top = new THREE.Mesh(new THREE.CylinderGeometry(r, r*0.92, r*0.28, 14), lam(topColor));
-  top.position.y = -r*0.14; g.add(top);
+  top.receiveShadow=true; top.position.y = -r*0.14; g.add(top);
   var cone = new THREE.Mesh(new THREE.ConeGeometry(r*0.92, r*1.5, 12), lam(rockColor));
   cone.rotation.x = Math.PI; cone.position.y = -r*0.28 - r*0.75 + 0.1; g.add(cone);
   var tip = new THREE.Mesh(new THREE.ConeGeometry(r*0.3, r*0.8, 7), lam(rockColor));
   tip.rotation.x = Math.PI; tip.position.y = -r*0.28 - r*1.5 - r*0.3; g.add(tip);
+  var stoneGeo=new THREE.IcosahedronGeometry(1,0);
+  for(var j=0;j<11;j++){
+    var a=j/11*Math.PI*2,sc=rand(.8,2.3);
+    var rock=new THREE.Mesh(stoneGeo,lam(rockColor));rock.position.set(Math.cos(a)*r*.88,-r*.28-rand(0,3),Math.sin(a)*r*.88);rock.scale.set(sc,sc*1.6,sc);g.add(rock);
+    if(topColor!==0xeef4fa && topColor!==0x5a3a3a){
+      var vine=new THREE.Mesh(new THREE.ConeGeometry(.25,rand(2,6),4),lam(0x51875c));vine.rotation.z=Math.PI;vine.position.set(Math.cos(a)*r*.98,-2,Math.sin(a)*r*.98);g.add(vine);
+    }
+  }
   return g;
 }
 
+var treeCount = 0;
 function addTrees(g, r, n, trunkC, folC, snowy){
+  // Each forest uses only three draw calls, even with hundreds of crowns.
+  var trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.16,.3,1,6),lam(trunkC),n);
+  var crowns = new THREE.InstancedMesh(snowy ? new THREE.ConeGeometry(1,1.8,7) : new THREE.IcosahedronGeometry(1,1),lam(folC),n*3);
+  var shadows = new THREE.InstancedMesh(new THREE.CircleGeometry(1,12),new THREE.MeshBasicMaterial({color:0x183d32,transparent:true,opacity:.15,depthWrite:false}),n);
+  var d=new THREE.Object3D(), col=new THREE.Color();
   for(var i=0;i<n;i++){
-    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*r*0.7;
-    var x = Math.cos(a)*rr, z = Math.sin(a)*rr, s = rand(0.8,1.5);
-    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18*s, 0.28*s, 1.4*s, 5), lam(trunkC));
-    trunk.position.set(x, 0.7*s, z); g.add(trunk);
-    if(snowy){
-      for(var k=0;k<3;k++){
-        var cone = new THREE.Mesh(new THREE.ConeGeometry((1.1-k*0.28)*s, 1.0*s, 6), lam(k%2? 0xe8f2fa : folC));
-        cone.position.set(x, (1.4+k*0.75)*s, z); g.add(cone);
-      }
-    } else {
-      var fol = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3*s, 0), lam(folC));
-      fol.position.set(x, 2.1*s, z); fol.rotation.y = rand(0,6); g.add(fol);
-      var fol2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8*s, 0), lam(folC));
-      fol2.position.set(x+rand(-.3,.3), 3.1*s, z+rand(-.3,.3)); g.add(fol2);
+    var x,z,a,rr;
+    for(var tries=0;tries<50;tries++){
+      a=rand(0,Math.PI*2); rr=Math.sqrt(random())*r*.9;
+      x=Math.cos(a)*rr;z=Math.sin(a)*rr;
+      if(r<25 || (Math.hypot(x,z+13)>11 && Math.hypot(x,z)>7 && !(Math.abs(x)<4 && z>0)))break;
     }
+    var sc=rand(.85,1.75),h=rand(2.1,3.3)*sc;
+    d.position.set(x,h*.5,z);d.rotation.set(0,a,rand(-.04,.04));d.scale.set(sc,h,sc);d.updateMatrix();trunks.setMatrixAt(i,d.matrix);
+    for(var k=0;k<3;k++){
+      d.position.set(x+(snowy?0:Math.cos(a+k*2)*sc*.65),h+(snowy?k*.8:k*.45)*sc,z+(snowy?0:Math.sin(a+k*2)*sc*.65));
+      var csize=(snowy?1.55-k*.32:1.5-k*.16)*sc;
+      d.rotation.set(0,a+k,0); d.scale.set(csize,csize*(snowy?1:rand(.75,1.1)),csize);d.updateMatrix();crowns.setMatrixAt(i*3+k,d.matrix);
+      col.setHex(folC).offsetHSL(rand(-.025,.025),rand(-.06,.05),rand(-.06,.1));crowns.setColorAt(i*3+k,col);
+    }
+    d.position.set(x,.075,z);d.rotation.set(-Math.PI/2,0,0);d.scale.set(sc*1.7,sc*1.3,1);d.updateMatrix();shadows.setMatrixAt(i,d.matrix);
   }
+  trunks.castShadow=true;crowns.castShadow=true;crowns.receiveShadow=true;
+  g.add(trunks,crowns,shadows);treeCount+=n;
 }
 
 function addHuts(g, r, n, roofC){
@@ -158,7 +196,7 @@ function addHuts(g, r, n, roofC){
 
 function addCrystals(g, r, n, color){
   for(var i=0;i<n;i++){
-    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*r*0.6;
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(random())*r*0.6;
     var s = rand(0.5,1.3);
     var cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.6*s, 0),
       new THREE.MeshLambertMaterial({ color: color, emissive: color, emissiveIntensity: 0.45, flatShading: true }));
@@ -167,15 +205,24 @@ function addCrystals(g, r, n, color){
   }
 }
 
+var waterCanvas=document.createElement('canvas');waterCanvas.width=64;waterCanvas.height=128;
+var wc=waterCanvas.getContext('2d');wc.fillStyle='#54bdde';wc.fillRect(0,0,64,128);
+for(var wi=0;wi<22;wi++){wc.fillStyle=wi%2?'rgba(255,255,255,.65)':'rgba(193,249,255,.25)';wc.fillRect(rand(0,64),rand(0,128),rand(1,4),rand(12,65));}
+var waterTexture=new THREE.CanvasTexture(waterCanvas);waterTexture.wrapS=waterTexture.wrapT=THREE.RepeatWrapping;
+var waterfallSheets=[];
 function waterfall(g, edgeAngle, r, len){
   // thin glowing sheet pouring off the island edge
   var w = new THREE.Mesh(new THREE.PlaneGeometry(r*0.35, len, 1, 6),
-    new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+    new THREE.MeshBasicMaterial({ color: 0xc7f8ff, map:waterTexture, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: false }));
   var x = Math.cos(edgeAngle)*r*0.97, z = Math.sin(edgeAngle)*r*0.97;
   w.position.set(x, -len/2, z);
   w.rotation.y = -edgeAngle + Math.PI/2;
-  w.userData.fall = true;
+  w.userData.fall = true;waterfallSheets.push(w);
   g.add(w);
+  // Bright foam lips and a natural river feeding the fall.
+  var river=new THREE.Mesh(new THREE.PlaneGeometry(r*.35,r*.65),new THREE.MeshLambertMaterial({color:0x70dbe8,map:waterTexture,transparent:true,opacity:.9}));
+  river.rotation.x=-Math.PI/2;river.rotation.z=edgeAngle-Math.PI/2;
+  river.position.set(Math.cos(edgeAngle)*r*.67,.10,Math.sin(edgeAngle)*r*.67);g.add(river);
   // mist puff at the bottom
   var mist = new THREE.Mesh(new THREE.SphereGeometry(r*0.22, 7, 5),
     new THREE.MeshBasicMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.4, depthWrite: false }));
@@ -199,9 +246,10 @@ var ELEMENTS = [
 
 function decorate(g, el, r){
   var deco = el.deco;
-  if(el.trees) addTrees(g, r, 4 + (Math.random()*3|0), el.trees[0], el.trees[1], el.snowy);
+  if(el.trees) addTrees(g, r, 28 + (random()*12|0), el.trees[0], el.trees[1], el.snowy);
+  if(!el.trees && el.name !== 'Fire') addTrees(g,r,el.name==='Sand'?10:22,0x776044,el.name==='Sand'?0x64ad71:el.name==='Water'?0x40b7a0:el.top,false);
   if(deco === 'cactus'){
-    for(var i=0;i<5;i++){ var a = rand(0,6.3), rr = Math.sqrt(Math.random())*r*0.65, s = rand(0.7,1.3);
+    for(var i=0;i<5;i++){ var a = rand(0,6.3), rr = Math.sqrt(random())*r*0.65, s = rand(0.7,1.3);
       var c = new THREE.Mesh(new THREE.CylinderGeometry(0.22*s, 0.26*s, 1.8*s, 6), lam(0x4a8a3e));
       c.position.set(Math.cos(a)*rr, 0.9*s, Math.sin(a)*rr); g.add(c); }
   } else if(deco === 'lava'){
@@ -216,13 +264,13 @@ function decorate(g, el, r){
   } else if(deco === 'crystal'){
     addCrystals(g, r, 6, el.top);
   } else if(deco === 'mushroom'){
-    for(var i2=0;i2<4;i2++){ var a2 = rand(0,6.3), rr2 = Math.sqrt(Math.random())*r*0.6, s2 = rand(0.8,1.4);
+    for(var i2=0;i2<4;i2++){ var a2 = rand(0,6.3), rr2 = Math.sqrt(random())*r*0.6, s2 = rand(0.8,1.4);
       var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16*s2, 0.24*s2, 1.1*s2, 6), lam(0xf0e8d8));
       stem.position.set(Math.cos(a2)*rr2, 0.55*s2, Math.sin(a2)*rr2); g.add(stem);
       var cap = new THREE.Mesh(new THREE.ConeGeometry(0.7*s2, 0.7*s2, 8), lam(0xd84a4a));
       cap.position.set(Math.cos(a2)*rr2, 1.35*s2, Math.sin(a2)*rr2); g.add(cap); }
   } else if(deco === 'grass'){
-    for(var i3=0;i3<8;i3++){ var a3 = rand(0,6.3), rr3 = Math.sqrt(Math.random())*r*0.75;
+    for(var i3=0;i3<8;i3++){ var a3 = rand(0,6.3), rr3 = Math.sqrt(random())*r*0.75;
       var tuft = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 4), lam(el.top === 0xe89ac0 ? 0xf0b8d8 : 0x5f9c3e));
       tuft.position.set(Math.cos(a3)*rr3, 0.25, Math.sin(a3)*rr3); g.add(tuft); }
   }
@@ -240,9 +288,9 @@ for(var ei=0; ei<10; ei++){
     var y0 = rand(-3, 14);
     var g = islandBase(r, el.top, el.rock);
     decorate(g, el, r);
-    if(copy === 0) addHuts(g, r, 2 + (Math.random()*2|0), [0xc85a3a,0x7a5a8a,0x4a7ab8][idx%3]); // one village per element
+    if(copy === 0) addHuts(g, r, 2 + (random()*2|0), [0xc85a3a,0x7a5a8a,0x4a7ab8][idx%3]); // one village per element
     var falls = [];
-    var nf = el.name === 'Water' ? 3 : (Math.random() < 0.55 ? 1 : 0);
+    var nf = el.name === 'Water' ? 3 : (random() < 0.55 ? 1 : 0);
     for(var f=0; f<nf; f++) falls.push(waterfall(g, rand(0, Math.PI*2), r, rand(14, 24)));
     g.position.set(Math.cos(ang)*dist, y0, Math.sin(ang)*dist);
     scene.add(g);
@@ -302,7 +350,7 @@ function ropeBridge(p1, p2){
 var HOME_R = 30;
 var home = new THREE.Group();
 var homeTop = new THREE.Mesh(new THREE.CylinderGeometry(HOME_R, HOME_R*0.94, 7, 24), lam(0x6ab04c));
-homeTop.position.y = -3.5; home.add(homeTop);
+homeTop.receiveShadow=true; homeTop.position.y = -3.5; home.add(homeTop);
 var homeCone = new THREE.Mesh(new THREE.ConeGeometry(HOME_R*0.94, 34, 18), lam(0x8a7460));
 homeCone.rotation.x = Math.PI; homeCone.position.y = -7 - 17; home.add(homeCone);
 var homeTip = new THREE.Mesh(new THREE.ConeGeometry(7, 14, 9), lam(0x7a6652));
@@ -316,7 +364,7 @@ scene.add(home);
   var d = new THREE.Object3D(), col = new THREE.Color();
   var pal = [0x86b95a, 0x6ba34b, 0x93bf62, 0x7fae57, 0xa8c258, 0x5f9c3e];
   for(var i=0;i<46;i++){
-    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*26;
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(random())*26;
     var s = rand(2.5, 7);
     d.position.set(Math.cos(a)*rr, 0.03, Math.sin(a)*rr);
     d.scale.set(s, s*rand(0.6,1), 1);
@@ -326,15 +374,15 @@ scene.add(home);
   inst.instanceColor.needsUpdate = true; home.add(inst);
 })();
 
-addTrees(home, HOME_R, 14, 0x6d4a2f, 0x3f7d33, false);
+addTrees(home, HOME_R, 110, 0x6d4a2f, 0x3f7d33, false);
 // flowers on home island
 (function(){
-  var N = 160, inst = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.13, 0),
+  var N = 420, inst = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.13, 0),
     new THREE.MeshLambertMaterial({ color: 0xffffff }), N);
   var d = new THREE.Object3D(), col = new THREE.Color();
   var pal = [0xffffff, 0xffd1dc, 0xfff3a0, 0xff9d76, 0xe8a0ff, 0x8fd0ff];
   for(var i=0;i<N;i++){
-    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*25;
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(random())*25;
     d.position.set(Math.cos(a)*rr, rand(0.12,0.3), Math.sin(a)*rr);
     d.scale.set(1, rand(1,1.8), 1); d.rotation.set(0, rand(0,6), 0); d.updateMatrix();
     inst.setMatrixAt(i, d.matrix); inst.setColorAt(i, col.setHex(pick(pal)));
@@ -382,6 +430,33 @@ var beamMat, beamCoreMat, crystalMat;
   home.userData.castle = castle;
 })();
 
+// Warm stone path, courtyard, windows and pennants.
+(function(){
+ var pathMat=lam(0xd6c799);
+ for(var i=0;i<18;i++){
+   var stone=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.35,.10,7),pathMat);
+   stone.scale.z=.68;stone.position.set(Math.sin(i*.7)*.5,.12,17-i*1.5);stone.receiveShadow=true;home.add(stone);
+ }
+ var castle=home.userData.castle;
+ castle.traverse(function(m){if(m.isMesh){m.castShadow=true;m.receiveShadow=true;}});
+ [-5,5].forEach(function(x){
+   for(var y=4;y<11;y+=3){
+     var win=new THREE.Mesh(new THREE.BoxGeometry(.6,1.25,.10),new THREE.MeshBasicMaterial({color:0xffdf92}));win.position.set(x,y,6.52);castle.add(win);
+   }
+   var pole=new THREE.Mesh(new THREE.CylinderGeometry(.055,.055,3,5),lam(0xd4b167));pole.position.set(x,16,5);castle.add(pole);
+   var flag=new THREE.Mesh(new THREE.PlaneGeometry(1.4,.85),new THREE.MeshLambertMaterial({color:0xd26cce,side:THREE.DoubleSide}));flag.position.set(x+.7,16.6,5);castle.add(flag);
+ });
+ var door=new THREE.Mesh(new THREE.BoxGeometry(2,3,.12),lam(0x65526c));door.position.set(0,1.5,3.55);castle.add(door);
+ // Thousands of grass blades are a single batched draw call.
+ var grass=new THREE.InstancedMesh(new THREE.ConeGeometry(.08,.45,3),lam(0x81b65a),1100);
+ var d=new THREE.Object3D();
+ for(var i=0;i<1100;i++){
+  var a=rand(0,6.283),r=rand(7,28),x=Math.cos(a)*r,z=Math.sin(a)*r;
+  if(Math.abs(x)<3.3 && z> -7)x+=4;
+  d.position.set(x,.22,z);d.rotation.set(0,a,rand(-.25,.25));d.scale.setScalar(rand(.6,1.7));d.updateMatrix();grass.setMatrixAt(i,d.matrix);
+ }home.add(grass);
+})();
+
 // home waterfalls pouring into the clouds
 var homeFalls = [];
 [0.4, 2.3, 4.4].forEach(function(a){ homeFalls.push(waterfall(home, a, HOME_R, 26)); });
@@ -397,7 +472,7 @@ for(var b2=0; b2<7; b2++){
   var wr = new THREE.Mesh(wingG, lam(0xe8ecf4));
   bg2.add(bbody); bg2.add(wl); bg2.add(wr); scene.add(bg2);
   birds.push({ mesh: bg2, wl: wl, wr: wr, a: rand(0,6.3), r: rand(24, 90), h: rand(8, 26),
-    speed: rand(0.12, 0.3)*(Math.random()<0.5?1:-1), flap: rand(0,9) });
+    speed: rand(0.12, 0.3)*(random()<0.5?1:-1), flap: rand(0,9) });
 }
 
 // ---------- player (the little hero boy) ----------
@@ -450,7 +525,7 @@ joyEl.addEventListener('pointermove', function(e){ if(e.pointerId === joyId) joy
 function joyEnd(e){ if(e.pointerId === joyId){ joyId = null; joyVec.x = 0; joyVec.y = 0; joyThumb.style.transform = 'translate(-50%,-50%)'; } }
 joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
 
-var cameraYaw = Math.PI, lookPointerId = null, lookLastX = 0, lookLastY = 0, camPitch = 0;
+var cameraYaw = 0, lookPointerId = null, lookLastX = 0, lookLastY = 0, camPitch = 0;
 canvas.addEventListener('pointerdown', function(e){
   if(e.pointerType === 'mouse' && e.button !== 0) return;
   lookPointerId = e.pointerId; lookLastX = e.clientX; lookLastY = e.clientY;
@@ -472,7 +547,8 @@ canvas.addEventListener('pointercancel', lookEnd);
 if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) document.body.classList.add('touch');
 
 // ---------- game state ----------
-var running = false, now = 0;
+var running = false, now = 0, overview=false;
+document.getElementById('viewBtn').addEventListener('click',function(){overview=!overview;this.textContent=overview?'🧒 BACK TO HERO':'🗺️ WORLD VIEW';joyVec.x=joyVec.y=0;});
 var isleInfo = document.getElementById('isleInfo');
 
 // ---------- main loop ----------
@@ -494,6 +570,7 @@ function frame(){
   var cry = home.userData.castle.userData.crystal;
   cry.rotation.y += dt*0.8; cry.position.y = 13.2 + Math.sin(now*1.4)*0.25;
 
+  waterTexture.offset.y = (now*.65)%1;
   // waterfall shimmer
   homeFalls.forEach(function(w, i){ w.material.opacity = 0.45 + 0.18*Math.sin(now*3 + i*2); });
 
@@ -505,7 +582,11 @@ function frame(){
     var f = Math.sin(b.flap)*0.7; b.wl.rotation.z = f; b.wr.rotation.z = -f;
   });
 
-  if(running){
+  if(running && overview){
+    var oa=now*.035;
+    camera.position.set(Math.sin(oa)*190,125,Math.cos(oa)*190);
+    camera.lookAt(0,-4,0);
+  } else if(running){
     // --- player movement on the home island ---
     var mx = joyVec.x, mz = joyVec.y;
     if(keys['KeyW'] || keys['ArrowUp']) mz -= 1;
@@ -569,6 +650,7 @@ document.getElementById('playBtn').addEventListener('click', function(){
 
 // debug/verification hook (harmless)
 window.oneisland = { P: P, scene: scene, player: player, islands: elementIslands,
+  renderer:renderer, treeCount:treeCount, version:"0.2",
   start: function(){ document.getElementById('playBtn').click(); },
   setYaw: function(y){ cameraYaw = y; } };
 
