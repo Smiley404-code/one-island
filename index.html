@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>One Island v0.1</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0b1c3a; touch-action:none;
+    font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; user-select:none; -webkit-user-select:none; }
+  #c { position:fixed; inset:0; display:block; }
+
+  #hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    padding:calc(8px + env(safe-area-inset-top)) 12px 0; pointer-events:none; z-index:5; }
+  .chip { color:#fff; font-weight:800; font-size:14px; background:rgba(20,40,80,.45);
+    border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:5px 12px;
+    text-shadow:0 2px 4px rgba(0,0,0,.4); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+
+  #joy { position:fixed; left:18px; bottom:calc(20px + env(safe-area-inset-bottom)); width:120px; height:120px;
+    border-radius:50%; background:rgba(255,255,255,.10); border:2px solid rgba(255,255,255,.25);
+    z-index:6; display:none; }
+  #joy .thumb { position:absolute; left:50%; top:50%; width:52px; height:52px; border-radius:50%;
+    background:rgba(255,255,255,.35); border:2px solid rgba(255,255,255,.5); transform:translate(-50%,-50%); }
+  body.playing.touch #joy { display:block; }
+
+  .overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:24px;
+    background:linear-gradient(165deg, rgba(18,48,96,.88), rgba(8,18,40,.94));
+    -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); color:#e6f2ff; }
+  .overlay h1 { font-size:clamp(38px,11vw,68px); letter-spacing:4px; color:#cfe6ff;
+    text-shadow:0 4px 0 #274a86, 0 8px 24px rgba(0,0,0,.5); font-weight:900; }
+  .overlay .ver { margin-top:6px; font-size:15px; font-weight:700; color:#8fc7ff;
+    background:rgba(143,199,255,.15); border:1px solid rgba(143,199,255,.5);
+    padding:3px 14px; border-radius:999px; letter-spacing:2px; }
+  .overlay .tag { margin-top:18px; font-size:15px; line-height:1.9; color:#c4ddf5; }
+  .playbtn { margin-top:26px; font-size:22px; font-weight:800; letter-spacing:1px; color:#10265a;
+    background:linear-gradient(180deg,#a8d8ff,#5ea0e8); border:none; border-radius:999px;
+    padding:16px 52px; box-shadow:0 6px 0 #33619e, 0 12px 28px rgba(0,0,0,.45); cursor:pointer; }
+  .playbtn:active { transform:translateY(4px); box-shadow:0 2px 0 #33619e, 0 6px 14px rgba(0,0,0,.45); }
+  .overlay .foot { position:absolute; bottom:calc(16px + env(safe-area-inset-bottom)); font-size:13px; color:#7ea8d4; }
+  .overlay .keys { margin-top:14px; font-size:13px; color:#93bce0; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div class="chip">🏝️ ONE ISLAND v0.1</div>
+  <div class="chip" id="isleInfo">🍃 Home Island</div>
+</div>
+
+<div id="joy"><div class="thumb" id="joyThumb"></div></div>
+
+<div class="overlay" id="start">
+  <h1>ONE ISLAND</h1>
+  <div class="ver">v0.1</div>
+  <div class="tag">🏝️ A world of floating islands<br>❄️🏜️🔥💧 20 islands, 10 magic elements<br>🏰 The castle beam protects them all<br>💎 The villain wants the crystals. Not today.</div>
+  <button class="playbtn" id="playBtn">▶ PLAY</button>
+  <div class="keys">📱 Joystick to run &bull; swipe to look around<br>💻 WASD / arrows to run &bull; drag mouse to look</div>
+  <div class="foot">Made by Smiley 💙</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+window.__errors = [];
+window.addEventListener('error', function(e){ window.__errors.push(String(e.message||e)); });
+
+// ---------- basics ----------
+var canvas = document.getElementById('c');
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(58, window.innerWidth/window.innerHeight, 0.1, 900);
+var SKY = new THREE.Color(0x7ec4f0);
+scene.background = SKY;
+scene.fog = new THREE.Fog(0x9fd4f2, 70, 340);
+
+var hemi = new THREE.HemisphereLight(0xd8ecff, 0x6a90b8, 0.95); scene.add(hemi);
+var sun = new THREE.DirectionalLight(0xfff3d0, 1.15); sun.position.set(60, 90, 40); scene.add(sun);
+
+function onResize(){ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+window.addEventListener('resize', onResize);
+
+// ---------- helpers ----------
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+function lam(color, opts){ opts = opts||{}; opts.color = color; if(opts.flat===undefined) opts.flat = true;
+  return new THREE.MeshLambertMaterial({ color: opts.color, flatShading: opts.flat }); }
+
+// ---------- sea of clouds below ----------
+(function(){
+  var N = 46, inst = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0),
+    new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, transparent: true, opacity: 0.92 }), N);
+  var d = new THREE.Object3D(), col = new THREE.Color();
+  for(var i=0;i<N;i++){
+    var a = rand(0,Math.PI*2), r = Math.sqrt(Math.random())*300 + 10;
+    d.position.set(Math.cos(a)*r, rand(-26,-9), Math.sin(a)*r);
+    d.scale.set(rand(9,22), rand(2.5,4.5), rand(7,16));
+    d.rotation.set(0, rand(0,6), 0); d.updateMatrix();
+    inst.setMatrixAt(i, d.matrix);
+    col.setHex(0xffffff).offsetHSL(0, 0, rand(-0.06,0)); inst.setColorAt(i, col);
+  }
+  inst.instanceColor.needsUpdate = true; scene.add(inst);
+})();
+
+// ---------- floating island builder ----------
+var floaters = []; // islands that bob
+
+function islandBase(r, topColor, rockColor){
+  var g = new THREE.Group();
+  var top = new THREE.Mesh(new THREE.CylinderGeometry(r, r*0.92, r*0.28, 14), lam(topColor));
+  top.position.y = -r*0.14; g.add(top);
+  var cone = new THREE.Mesh(new THREE.ConeGeometry(r*0.92, r*1.5, 12), lam(rockColor));
+  cone.rotation.x = Math.PI; cone.position.y = -r*0.28 - r*0.75 + 0.1; g.add(cone);
+  var tip = new THREE.Mesh(new THREE.ConeGeometry(r*0.3, r*0.8, 7), lam(rockColor));
+  tip.rotation.x = Math.PI; tip.position.y = -r*0.28 - r*1.5 - r*0.3; g.add(tip);
+  return g;
+}
+
+function addTrees(g, r, n, trunkC, folC, snowy){
+  for(var i=0;i<n;i++){
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*r*0.7;
+    var x = Math.cos(a)*rr, z = Math.sin(a)*rr, s = rand(0.8,1.5);
+    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18*s, 0.28*s, 1.4*s, 5), lam(trunkC));
+    trunk.position.set(x, 0.7*s, z); g.add(trunk);
+    if(snowy){
+      for(var k=0;k<3;k++){
+        var cone = new THREE.Mesh(new THREE.ConeGeometry((1.1-k*0.28)*s, 1.0*s, 6), lam(k%2? 0xe8f2fa : folC));
+        cone.position.set(x, (1.4+k*0.75)*s, z); g.add(cone);
+      }
+    } else {
+      var fol = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3*s, 0), lam(folC));
+      fol.position.set(x, 2.1*s, z); fol.rotation.y = rand(0,6); g.add(fol);
+      var fol2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8*s, 0), lam(folC));
+      fol2.position.set(x+rand(-.3,.3), 3.1*s, z+rand(-.3,.3)); g.add(fol2);
+    }
+  }
+}
+
+function addHuts(g, r, n, roofC){
+  for(var i=0;i<n;i++){
+    var a = rand(0,Math.PI*2), rr = r*0.45 + rand(0, r*0.25);
+    var x = Math.cos(a)*rr, z = Math.sin(a)*rr, s = rand(0.9,1.2);
+    var hut = new THREE.Group();
+    var base = new THREE.Mesh(new THREE.BoxGeometry(1.7*s, 1.2*s, 1.5*s), lam(0x9a7a4e));
+    base.position.y = 0.6*s; hut.add(base);
+    var roof = new THREE.Mesh(new THREE.ConeGeometry(1.5*s, 1.1*s, 4), lam(roofC));
+    roof.position.y = 1.75*s; roof.rotation.y = Math.PI/4; hut.add(roof);
+    hut.position.set(x, 0, z); hut.rotation.y = rand(0,6); g.add(hut);
+  }
+}
+
+function addCrystals(g, r, n, color){
+  for(var i=0;i<n;i++){
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*r*0.6;
+    var s = rand(0.5,1.3);
+    var cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.6*s, 0),
+      new THREE.MeshLambertMaterial({ color: color, emissive: color, emissiveIntensity: 0.45, flatShading: true }));
+    cr.position.set(Math.cos(a)*rr, 0.55*s, Math.sin(a)*rr);
+    cr.rotation.set(rand(-.2,.2), rand(0,6), rand(-.2,.2)); g.add(cr);
+  }
+}
+
+function waterfall(g, edgeAngle, r, len){
+  // thin glowing sheet pouring off the island edge
+  var w = new THREE.Mesh(new THREE.PlaneGeometry(r*0.35, len, 1, 6),
+    new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+  var x = Math.cos(edgeAngle)*r*0.97, z = Math.sin(edgeAngle)*r*0.97;
+  w.position.set(x, -len/2, z);
+  w.rotation.y = -edgeAngle + Math.PI/2;
+  w.userData.fall = true;
+  g.add(w);
+  // mist puff at the bottom
+  var mist = new THREE.Mesh(new THREE.SphereGeometry(r*0.22, 7, 5),
+    new THREE.MeshBasicMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.4, depthWrite: false }));
+  mist.position.set(x*1.05, -len, z*1.05); mist.scale.y = 0.5; g.add(mist);
+  return w;
+}
+
+// ---------- element themes ----------
+var ELEMENTS = [
+  { name:'Leaf',    emoji:'🍃', top:0x69b04a, rock:0x8a7460, trees:[0x6d4a2f,0x3f7d33], deco:'grass' },
+  { name:'Snow',    emoji:'❄️', top:0xeef4fa, rock:0x9aa8b8, trees:[0x5a4a3a,0xdfeaf4], snowy:true, deco:'snow' },
+  { name:'Sand',    emoji:'🏜️', top:0xe8d290, rock:0xb09468, deco:'cactus' },
+  { name:'Fire',    emoji:'🔥', top:0x5a3a3a, rock:0x4a3436, deco:'lava' },
+  { name:'Water',   emoji:'💧', top:0x3f8ac8, rock:0x5a7a94, deco:'pool' },
+  { name:'Flower',  emoji:'🌸', top:0xe89ac0, rock:0x8a7460, trees:[0x6d4a2f,0xf0b8d8], deco:'grass' },
+  { name:'Crystal', emoji:'🔮', top:0x9a7ad0, rock:0x6a5a88, deco:'crystal' },
+  { name:'Mushroom',emoji:'🍄', top:0xc8a878, rock:0x8a7460, deco:'mushroom' },
+  { name:'Storm',   emoji:'⚡', top:0x6a7a9a, rock:0x52586a, deco:'crystal' },
+  { name:'Star',    emoji:'⭐', top:0xf0d878, rock:0xa89868, deco:'crystal' }
+];
+
+function decorate(g, el, r){
+  var deco = el.deco;
+  if(el.trees) addTrees(g, r, 4 + (Math.random()*3|0), el.trees[0], el.trees[1], el.snowy);
+  if(deco === 'cactus'){
+    for(var i=0;i<5;i++){ var a = rand(0,6.3), rr = Math.sqrt(Math.random())*r*0.65, s = rand(0.7,1.3);
+      var c = new THREE.Mesh(new THREE.CylinderGeometry(0.22*s, 0.26*s, 1.8*s, 6), lam(0x4a8a3e));
+      c.position.set(Math.cos(a)*rr, 0.9*s, Math.sin(a)*rr); g.add(c); }
+  } else if(deco === 'lava'){
+    var pool = new THREE.Mesh(new THREE.CircleGeometry(r*0.35, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff7a2a }));
+    pool.rotation.x = -Math.PI/2; pool.position.y = 0.05; g.add(pool);
+    addCrystals(g, r, 5, 0xff5a1a);
+  } else if(deco === 'pool'){
+    var pool2 = new THREE.Mesh(new THREE.CircleGeometry(r*0.4, 12),
+      new THREE.MeshBasicMaterial({ color: 0x7ad0f0, transparent:true, opacity:0.9 }));
+    pool2.rotation.x = -Math.PI/2; pool2.position.y = 0.05; g.add(pool2);
+  } else if(deco === 'crystal'){
+    addCrystals(g, r, 6, el.top);
+  } else if(deco === 'mushroom'){
+    for(var i2=0;i2<4;i2++){ var a2 = rand(0,6.3), rr2 = Math.sqrt(Math.random())*r*0.6, s2 = rand(0.8,1.4);
+      var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16*s2, 0.24*s2, 1.1*s2, 6), lam(0xf0e8d8));
+      stem.position.set(Math.cos(a2)*rr2, 0.55*s2, Math.sin(a2)*rr2); g.add(stem);
+      var cap = new THREE.Mesh(new THREE.ConeGeometry(0.7*s2, 0.7*s2, 8), lam(0xd84a4a));
+      cap.position.set(Math.cos(a2)*rr2, 1.35*s2, Math.sin(a2)*rr2); g.add(cap); }
+  } else if(deco === 'grass'){
+    for(var i3=0;i3<8;i3++){ var a3 = rand(0,6.3), rr3 = Math.sqrt(Math.random())*r*0.75;
+      var tuft = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 4), lam(el.top === 0xe89ac0 ? 0xf0b8d8 : 0x5f9c3e));
+      tuft.position.set(Math.cos(a3)*rr3, 0.25, Math.sin(a3)*rr3); g.add(tuft); }
+  }
+}
+
+// ---------- build the 20 element islands (2 of each element) ----------
+var elementIslands = [];
+for(var ei=0; ei<10; ei++){
+  for(var copy=0; copy<2; copy++){
+    var el = ELEMENTS[ei];
+    var idx = ei*2 + copy;
+    var ang = (idx/20)*Math.PI*2 + rand(-0.1, 0.1);
+    var dist = rand(64, 128);
+    var r = rand(11, 17);
+    var y0 = rand(-3, 14);
+    var g = islandBase(r, el.top, el.rock);
+    decorate(g, el, r);
+    if(copy === 0) addHuts(g, r, 2 + (Math.random()*2|0), [0xc85a3a,0x7a5a8a,0x4a7ab8][idx%3]); // one village per element
+    var falls = [];
+    var nf = el.name === 'Water' ? 3 : (Math.random() < 0.55 ? 1 : 0);
+    for(var f=0; f<nf; f++) falls.push(waterfall(g, rand(0, Math.PI*2), r, rand(14, 24)));
+    g.position.set(Math.cos(ang)*dist, y0, Math.sin(ang)*dist);
+    scene.add(g);
+    floaters.push({ mesh: g, baseY: y0, phase: rand(0, 6.3), amp: rand(0.35, 0.8), speed: rand(0.25, 0.5), falls: falls });
+    elementIslands.push({ el: el, mesh: g });
+  }
+}
+
+// ---------- rope bridges between a few neighbouring islands ----------
+function ropeBridge(p1, p2){
+  var g = new THREE.Group();
+  var dir = new THREE.Vector3().subVectors(p2, p1);
+  var len = Math.hypot(dir.x, dir.z);
+  var mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+  var nPlanks = Math.max(6, Math.floor(len/1.4));
+  var sag = len*0.07;
+  for(var i=0;i<=nPlanks;i++){
+    var t = i/nPlanks;
+    var x = p1.x + dir.x*t, z = p1.z + dir.z*t;
+    var y = p1.y + (p2.y-p1.y)*t - Math.sin(t*Math.PI)*sag;
+    var plank = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.09, 0.55), lam(0x8a6a42));
+    plank.position.set(x, y, z);
+    plank.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI/2;
+    g.add(plank);
+  }
+  // side ropes
+  [-0.85, 0.85].forEach(function(off){
+    var pts = [];
+    for(var i2=0;i2<=12;i2++){
+      var t2 = i2/12;
+      pts.push(new THREE.Vector3(
+        p1.x + dir.x*t2 + Math.cos(Math.atan2(dir.z,dir.x))*off*0 - (dir.z/len)*off,
+        p1.y + (p2.y-p1.y)*t2 - Math.sin(t2*Math.PI)*sag + 0.55,
+        p1.z + dir.z*t2 + (dir.x/len)*off));
+    }
+    var rope = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.05, 4),
+      lam(0x6a5238));
+    g.add(rope);
+  });
+  scene.add(g);
+}
+// bridge the two nearest islands to home (visual only, for now)
+(function(){
+  var near = floaters.slice().sort(function(a,b){
+    return a.mesh.position.length() - b.mesh.position.length(); }).slice(0, 3);
+  near.forEach(function(fl){
+    var p1 = new THREE.Vector3(0, 0, 0);
+    var p2 = fl.mesh.position.clone();
+    var d = p2.clone().normalize();
+    p1 = d.clone().multiplyScalar(28); p1.y = 0.4;
+    p2 = d.clone().multiplyScalar(p2.length() - 13); p2.y = fl.mesh.position.y + 0.4;
+    ropeBridge(p1, p2);
+  });
+})();
+
+// ---------- HOME ISLAND (centre) ----------
+var HOME_R = 30;
+var home = new THREE.Group();
+var homeTop = new THREE.Mesh(new THREE.CylinderGeometry(HOME_R, HOME_R*0.94, 7, 24), lam(0x6ab04c));
+homeTop.position.y = -3.5; home.add(homeTop);
+var homeCone = new THREE.Mesh(new THREE.ConeGeometry(HOME_R*0.94, 34, 18), lam(0x8a7460));
+homeCone.rotation.x = Math.PI; homeCone.position.y = -7 - 17; home.add(homeCone);
+var homeTip = new THREE.Mesh(new THREE.ConeGeometry(7, 14, 9), lam(0x7a6652));
+homeTip.rotation.x = Math.PI; homeTip.position.y = -7 - 34 - 5; home.add(homeTip);
+scene.add(home);
+
+// painterly grass patches
+(function(){
+  var g2 = new THREE.CircleGeometry(1, 12);
+  var inst = new THREE.InstancedMesh(g2, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }), 46);
+  var d = new THREE.Object3D(), col = new THREE.Color();
+  var pal = [0x86b95a, 0x6ba34b, 0x93bf62, 0x7fae57, 0xa8c258, 0x5f9c3e];
+  for(var i=0;i<46;i++){
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*26;
+    var s = rand(2.5, 7);
+    d.position.set(Math.cos(a)*rr, 0.03, Math.sin(a)*rr);
+    d.scale.set(s, s*rand(0.6,1), 1);
+    d.rotation.set(-Math.PI/2, 0, rand(0,6)); d.updateMatrix();
+    inst.setMatrixAt(i, d.matrix); inst.setColorAt(i, col.setHex(pick(pal)));
+  }
+  inst.instanceColor.needsUpdate = true; home.add(inst);
+})();
+
+addTrees(home, HOME_R, 14, 0x6d4a2f, 0x3f7d33, false);
+// flowers on home island
+(function(){
+  var N = 160, inst = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.13, 0),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), N);
+  var d = new THREE.Object3D(), col = new THREE.Color();
+  var pal = [0xffffff, 0xffd1dc, 0xfff3a0, 0xff9d76, 0xe8a0ff, 0x8fd0ff];
+  for(var i=0;i<N;i++){
+    var a = rand(0,Math.PI*2), rr = Math.sqrt(Math.random())*25;
+    d.position.set(Math.cos(a)*rr, rand(0.12,0.3), Math.sin(a)*rr);
+    d.scale.set(1, rand(1,1.8), 1); d.rotation.set(0, rand(0,6), 0); d.updateMatrix();
+    inst.setMatrixAt(i, d.matrix); inst.setColorAt(i, col.setHex(pick(pal)));
+  }
+  inst.instanceColor.needsUpdate = true; home.add(inst);
+})();
+addHuts(home, HOME_R, 4, 0xc85a3a); // hero's village
+
+// ---------- the great castle + protection beam ----------
+var beamMat, beamCoreMat, crystalMat;
+(function(){
+  var castle = new THREE.Group();
+  var stone = lam(0xcfc8e8), roofM = lam(0x7a5ac8);
+  var keep = new THREE.Mesh(new THREE.BoxGeometry(7, 9, 7), stone); keep.position.y = 4.5; castle.add(keep);
+  var keepRoof = new THREE.Mesh(new THREE.ConeGeometry(5.4, 3.6, 4), roofM);
+  keepRoof.position.y = 10.8; keepRoof.rotation.y = Math.PI/4; castle.add(keepRoof);
+  [[-5,-5],[5,-5],[-5,5],[5,5]].forEach(function(q){
+    var t = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 12, 8), stone);
+    t.position.set(q[0], 6, q[1]); castle.add(t);
+    var tr = new THREE.Mesh(new THREE.ConeGeometry(2.1, 3.4, 8), roofM);
+    tr.position.set(q[0], 13.7, q[1]); castle.add(tr);
+  });
+  // wall ring (low, towards the village)
+  var wall = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9.5, 2.6, 16, 1, true),
+    new THREE.MeshLambertMaterial({ color: 0xbfb8dd, flatShading: true, side: THREE.DoubleSide }));
+  wall.position.y = 1.3; castle.add(wall);
+  castle.position.set(0, 0, -13);
+  home.add(castle);
+
+  // power crystal at the beam base
+  crystalMat = new THREE.MeshLambertMaterial({ color: 0xe89af0, emissive: 0xd878f0, emissiveIntensity: 0.8, flatShading: true });
+  var crystal = new THREE.Mesh(new THREE.OctahedronGeometry(2.2, 0), crystalMat);
+  crystal.position.set(0, 13.2, -13); home.add(crystal);
+  castle.userData = { crystal: crystal };
+
+  // the beam: soft outer glow + bright core
+  beamMat = new THREE.MeshBasicMaterial({ color: 0xe88af8, transparent: true, opacity: 0.28, depthWrite: false, fog: false });
+  var beam = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.6, 260, 12, 1, true), beamMat);
+  beam.position.set(0, 130, -13); home.add(beam);
+  beamCoreMat = new THREE.MeshBasicMaterial({ color: 0xf8d8ff, transparent: true, opacity: 0.6, depthWrite: false, fog: false });
+  var core = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 260, 8, 1, true), beamCoreMat);
+  core.position.set(0, 130, -13); home.add(core);
+  var beamLight = new THREE.PointLight(0xe89af8, 1.2, 60);
+  beamLight.position.set(0, 14, -13); home.add(beamLight);
+  home.userData.castle = castle;
+})();
+
+// home waterfalls pouring into the clouds
+var homeFalls = [];
+[0.4, 2.3, 4.4].forEach(function(a){ homeFalls.push(waterfall(home, a, HOME_R, 26)); });
+
+// ---------- birds ----------
+var birds = [];
+for(var b2=0; b2<7; b2++){
+  var bg2 = new THREE.Group();
+  var bbody = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 5), lam(0xffffff));
+  bbody.scale.set(1, 0.7, 1.6);
+  var wingG = new THREE.BoxGeometry(1.1, 0.05, 0.4); wingG.translate(0.55, 0, 0);
+  var wl = new THREE.Mesh(wingG, lam(0xe8ecf4)); wl.scale.x = -1;
+  var wr = new THREE.Mesh(wingG, lam(0xe8ecf4));
+  bg2.add(bbody); bg2.add(wl); bg2.add(wr); scene.add(bg2);
+  birds.push({ mesh: bg2, wl: wl, wr: wr, a: rand(0,6.3), r: rand(24, 90), h: rand(8, 26),
+    speed: rand(0.12, 0.3)*(Math.random()<0.5?1:-1), flap: rand(0,9) });
+}
+
+// ---------- player (the little hero boy) ----------
+function makePlayer(){
+  var g = new THREE.Group();
+  var skin = lam(0xf0c08a), tunic = lam(0x3a5a9a), pants = lam(0x4a3826), hairM = lam(0x2c1e12);
+  var legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.6, 0.26), pants); legL.position.set(-0.16, 0.3, 0);
+  var legR = legL.clone(); legR.position.x = 0.16;
+  var body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.66, 0.36), tunic); body.position.y = 0.94;
+  var head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.4), skin); head.position.y = 1.5;
+  var hair = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.44), hairM); hair.position.y = 1.74;
+  var armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.56, 0.2), tunic); armL.position.set(-0.42, 1.28, 0);
+  armL.geometry.translate(0, -0.22, 0);
+  var armR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.56, 0.2), tunic); armR.position.set(0.42, 1.28, 0);
+  armR.geometry.translate(0, -0.22, 0);
+  // little sword on his back
+  var sword = new THREE.Group();
+  var blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.95, 0.03), lam(0xd9e2ea, {flat:false}));
+  blade.position.y = 0.6;
+  var guard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.06), lam(0x8a6a2f)); guard.position.y = 0.14;
+  sword.add(blade); sword.add(guard);
+  sword.position.set(0.18, 1.05, -0.24); sword.rotation.z = 0.5;
+  g.add(legL); g.add(legR); g.add(body); g.add(head); g.add(hair); g.add(armL); g.add(armR); g.add(sword);
+  g.userData = { legL: legL, legR: legR, armL: armL, armR: armR };
+  return g;
+}
+var player = makePlayer(); scene.add(player);
+var pShadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 16),
+  new THREE.MeshBasicMaterial({ color: 0x1a2e14, transparent: true, opacity: 0.28, depthWrite: false }));
+pShadow.rotation.x = -Math.PI/2; pShadow.position.y = 0.04; scene.add(pShadow);
+var P = { x: 0, z: 8, rotY: Math.PI, walk: 0, speed: 0 };
+
+// ---------- input ----------
+var keys = {};
+window.addEventListener('keydown', function(e){ keys[e.code] = true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.code)>=0) e.preventDefault(); });
+window.addEventListener('keyup', function(e){ keys[e.code] = false; });
+
+var joyVec = { x: 0, y: 0 }, joyId = null;
+var joyEl = document.getElementById('joy'), joyThumb = document.getElementById('joyThumb');
+function joyMove(e){
+  var r = joyEl.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
+  var dx = e.clientX - cx, dy = e.clientY - cy, max = r.width/2;
+  var len = Math.hypot(dx, dy); if(len > max){ dx = dx/len*max; dy = dy/len*max; }
+  joyVec.x = dx/max; joyVec.y = dy/max;
+  joyThumb.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+}
+joyEl.addEventListener('pointerdown', function(e){ joyId = e.pointerId; joyEl.setPointerCapture(joyId); joyMove(e); e.preventDefault(); });
+joyEl.addEventListener('pointermove', function(e){ if(e.pointerId === joyId) joyMove(e); });
+function joyEnd(e){ if(e.pointerId === joyId){ joyId = null; joyVec.x = 0; joyVec.y = 0; joyThumb.style.transform = 'translate(-50%,-50%)'; } }
+joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
+
+var cameraYaw = Math.PI, lookPointerId = null, lookLastX = 0, lookLastY = 0, camPitch = 0;
+canvas.addEventListener('pointerdown', function(e){
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  lookPointerId = e.pointerId; lookLastX = e.clientX; lookLastY = e.clientY;
+  try { canvas.setPointerCapture(lookPointerId); } catch(_) {}
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', function(e){
+  if(e.pointerId !== lookPointerId) return;
+  var dx = e.clientX - lookLastX, dy = e.clientY - lookLastY;
+  lookLastX = e.clientX; lookLastY = e.clientY;
+  cameraYaw -= dx * 0.006;
+  camPitch = Math.max(-0.45, Math.min(0.6, camPitch + dy * 0.004));
+  e.preventDefault();
+});
+function lookEnd(e){ if(e.pointerId === lookPointerId) lookPointerId = null; }
+canvas.addEventListener('pointerup', lookEnd);
+canvas.addEventListener('pointercancel', lookEnd);
+
+if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) document.body.classList.add('touch');
+
+// ---------- game state ----------
+var running = false, now = 0;
+var isleInfo = document.getElementById('isleInfo');
+
+// ---------- main loop ----------
+var last = performance.now();
+function frame(){
+  requestAnimationFrame(frame);
+  var t = performance.now(); var dt = Math.min(0.05, (t - last)/1000); last = t; now = t/1000;
+
+  // islands bob gently (always, so the start screen looks alive)
+  floaters.forEach(function(fl){
+    fl.mesh.position.y = fl.baseY + Math.sin(now*fl.speed + fl.phase)*fl.amp;
+  });
+
+  // beam shimmer (always)
+  var pulse = 0.5 + 0.5*Math.sin(now*2.2);
+  beamMat.opacity = 0.2 + 0.14*pulse;
+  beamCoreMat.opacity = 0.45 + 0.25*pulse;
+  crystalMat.emissiveIntensity = 0.6 + 0.4*pulse;
+  var cry = home.userData.castle.userData.crystal;
+  cry.rotation.y += dt*0.8; cry.position.y = 13.2 + Math.sin(now*1.4)*0.25;
+
+  // waterfall shimmer
+  homeFalls.forEach(function(w, i){ w.material.opacity = 0.45 + 0.18*Math.sin(now*3 + i*2); });
+
+  // birds
+  birds.forEach(function(b){
+    b.a += b.speed * dt; b.flap += dt * 9;
+    b.mesh.position.set(Math.cos(b.a)*b.r, b.h + Math.sin(b.a*3)*1.4, Math.sin(b.a)*b.r);
+    b.mesh.rotation.y = -b.a + (b.speed > 0 ? Math.PI/2 : -Math.PI/2);
+    var f = Math.sin(b.flap)*0.7; b.wl.rotation.z = f; b.wr.rotation.z = -f;
+  });
+
+  if(running){
+    // --- player movement on the home island ---
+    var mx = joyVec.x, mz = joyVec.y;
+    if(keys['KeyW'] || keys['ArrowUp']) mz -= 1;
+    if(keys['KeyS'] || keys['ArrowDown']) mz += 1;
+    if(keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+    if(keys['KeyD'] || keys['ArrowRight']) mx += 1;
+    var ml = Math.hypot(mx, mz); if(ml > 1){ mx /= ml; mz /= ml; }
+    // move relative to camera
+    var sin = Math.sin(cameraYaw), cos = Math.cos(cameraYaw);
+    var wx = mx*cos - mz*sin, wz = mx*sin + mz*cos;
+    P.speed = ml > 0.08 ? 7 : 0;
+    if(P.speed > 0){
+      P.x += wx * 7 * dt; P.z += wz * 7 * dt;
+      var rr = Math.hypot(P.x, P.z);
+      if(rr > HOME_R - 1.5){ P.x = P.x/rr*(HOME_R - 1.5); P.z = P.z/rr*(HOME_R - 1.5); }
+      var targetRot = Math.atan2(wx, wz), dr = targetRot - P.rotY;
+      while(dr > Math.PI) dr -= Math.PI*2; while(dr < -Math.PI) dr += Math.PI*2;
+      P.rotY += dr * Math.min(1, 14*dt);
+      P.walk += dt * 11;
+    } else { P.walk += dt * 2; }
+
+    var u = player.userData;
+    var sw = P.speed > 0 ? Math.sin(P.walk) : 0, idle = Math.sin(P.walk*0.5)*0.05;
+    u.legL.rotation.x = sw * 0.7; u.legR.rotation.x = -sw * 0.7;
+    u.armL.rotation.x = -sw * 0.5; u.armR.rotation.x = sw * 0.5;
+    player.position.set(P.x, Math.abs(sw)*0.06 + (P.speed>0?0:idle), P.z);
+    player.rotation.y = P.rotY;
+    pShadow.position.x = P.x; pShadow.position.z = P.z;
+
+    // nearest island info chip
+    var nearName = '🍃 Home Island', nd = 1e9;
+    elementIslands.forEach(function(ei2){
+      var dx2 = ei2.mesh.position.x - P.x, dz2 = ei2.mesh.position.z - P.z;
+      var d2 = Math.hypot(dx2, dz2);
+      if(d2 < nd){ nd = d2; nearName = ei2.el.emoji + ' ' + ei2.el.name + ' Island (' + Math.round(d2) + 'm)'; }
+    });
+    isleInfo.textContent = nd < 45 ? nearName : '🍃 Home Island';
+
+    // --- camera ---
+    var cd = 9.5, cy2 = 6.0 + camPitch*8;
+    var cx = P.x + Math.sin(cameraYaw) * cd;
+    var cz = P.z + Math.cos(cameraYaw) * cd;
+    camera.position.x += (cx - camera.position.x) * Math.min(1, 6*dt);
+    camera.position.y += (cy2 - camera.position.y) * Math.min(1, 6*dt);
+    camera.position.z += (cz - camera.position.z) * Math.min(1, 6*dt);
+    camera.lookAt(P.x - Math.sin(cameraYaw) * 4, 2.2 - camPitch*6, P.z - Math.cos(cameraYaw) * 4);
+  } else {
+    // start screen: slow orbit around the castle
+    var oa = now * 0.08;
+    camera.position.set(Math.sin(oa)*34, 12 + Math.sin(now*0.2)*2, Math.cos(oa)*34);
+    camera.lookAt(0, 8, -8);
+  }
+
+  renderer.render(scene, camera);
+}
+
+document.getElementById('playBtn').addEventListener('click', function(){
+  document.getElementById('start').classList.add('hidden');
+  running = true; document.body.classList.add('playing');
+});
+
+// debug/verification hook (harmless)
+window.oneisland = { P: P, scene: scene, player: player, islands: elementIslands,
+  start: function(){ document.getElementById('playBtn').click(); },
+  setYaw: function(y){ cameraYaw = y; } };
+
+camera.position.set(0, 12, 34);
+frame();
+})();
+</script>
+</body>
+</html>
