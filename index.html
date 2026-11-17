@@ -41,7 +41,7 @@
   .overlay .keys { margin-top:14px; font-size:13px; color:#93bce0; }
   #viewBtn {position:fixed;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:7;border:1px solid #ffffff70;border-radius:24px;padding:12px 16px;background:#153a54b8;color:white;font-size:12px;font-weight:800;letter-spacing:1px;display:none;backdrop-filter:blur(8px);}
   body.playing #viewBtn {display:block;}
-  @media(max-width:500px){.chip{font-size:10px;padding:7px 9px;}#hud{gap:6px;}.overlay .tag{font-size:13px;}.overlay h1{font-size:40px;}.overlay .keys{font-size:11px;}}
+  @media(max-width:500px){body.playing #joy{display:block;}.chip{font-size:10px;padding:7px 9px;}#hud{gap:6px;}.overlay .tag{font-size:13px;}.overlay h1{font-size:40px;}.overlay .keys{font-size:11px;}}
   .hidden { display:none !important; }
 </style>
 </head>
@@ -79,7 +79,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.16;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -89,7 +89,7 @@ var SKY = new THREE.Color(0x8dceec);
 scene.background = SKY;
 scene.fog = new THREE.Fog(0xb7dceb, 110, 390);
 
-var hemi = new THREE.HemisphereLight(0xd9f4ff, 0x596b49, 1.1); scene.add(hemi);
+var hemi = new THREE.HemisphereLight(0xd9f4ff, 0x596b49, 0.85); scene.add(hemi);
 var sun = new THREE.DirectionalLight(0xfff3d0, 1.15); sun.position.set(60, 90, 40); scene.add(sun);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024,1024);
@@ -157,7 +157,7 @@ var treeCount = 0;
 function addTrees(g, r, n, trunkC, folC, snowy){
   // Each forest uses only three draw calls, even with hundreds of crowns.
   var trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.16,.3,1,6),lam(trunkC),n);
-  var crowns = new THREE.InstancedMesh(snowy ? new THREE.ConeGeometry(1,1.8,7) : new THREE.IcosahedronGeometry(1,1),lam(folC),n*3);
+  var crowns = new THREE.InstancedMesh(snowy ? new THREE.ConeGeometry(1,1.8,7) : new THREE.IcosahedronGeometry(1,1),lam(0xffffff),n*3);
   var shadows = new THREE.InstancedMesh(new THREE.CircleGeometry(1,12),new THREE.MeshBasicMaterial({color:0x183d32,transparent:true,opacity:.15,depthWrite:false}),n);
   var d=new THREE.Object3D(), col=new THREE.Color();
   for(var i=0;i<n;i++){
@@ -626,13 +626,13 @@ function frame(){
     isleInfo.textContent = nd < 45 ? nearName : '🍃 Home Island';
 
     // --- camera ---
-    var cd = 9.5, cy2 = 6.0 + camPitch*8;
+    var cd = 13.5, cy2 = 8.0 + camPitch*8;
     var cx = P.x + Math.sin(cameraYaw) * cd;
     var cz = P.z + Math.cos(cameraYaw) * cd;
     camera.position.x += (cx - camera.position.x) * Math.min(1, 6*dt);
     camera.position.y += (cy2 - camera.position.y) * Math.min(1, 6*dt);
     camera.position.z += (cz - camera.position.z) * Math.min(1, 6*dt);
-    camera.lookAt(P.x - Math.sin(cameraYaw) * 4, 2.2 - camPitch*6, P.z - Math.cos(cameraYaw) * 4);
+    camera.lookAt(P.x - Math.sin(cameraYaw) * 4, 4.2 - camPitch*6, P.z - Math.cos(cameraYaw) * 4);
   } else {
     // start screen: slow orbit around the castle
     var oa = now * 0.08;
